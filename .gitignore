@@ -1,1 +1,5 @@
 src/main.rs
+.vscode/*
+.idea/*
+target/*
+exhort_validator.log
