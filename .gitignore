@@ -3,3 +3,4 @@ src/main.rs
 .idea/*
 target/*
 exhort_validator.log
+osv_dep_analysis.json

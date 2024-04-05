@@ -2,13 +2,15 @@ use crate::sbom_cdx;
 use log::{error, info};
 use serde::de::value::StringDeserializer;
 use serde_derive::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{to_string_pretty, Value};
 use simplelog::*;
 use std::collections::{HashMap, HashSet};
+use std::fs::OpenOptions;
+use std::io::Write;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Vulnerability {
     CVE_ID: String,
     CVSSScore: String,
@@ -23,7 +25,7 @@ impl Vulnerability {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Vulns {
     vulnerabilities: Option<Vec<Vulnerability>>,
 }
@@ -74,38 +76,89 @@ impl OsvVulns {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Results {
     package: String,
-    CVE: String,
-    CVSSScore: String,
+    vulndeptree: VulnDepTree,
 }
 
-impl Results {
-    pub fn new(package: String, CVE: String, CVSSScore: String) -> Self {
-        Results {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VulnDepTree {
+    vulnerabilities: Vulns,
+    dependencies: Option<Vec<Depends>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Depends {
+    package: String,
+    vulnerabilities: Vulns,
+}
+
+impl Depends {
+    pub fn new(package: String, vuln: Vulns) -> Self {
+        Depends {
             package: package,
-            CVE: CVE,
-            CVSSScore: CVSSScore,
+            vulnerabilities: vuln,
         }
     }
 }
 
-pub async fn retrieve_sbom_purl_vulns(filepath: &str) {
-    let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
-    let mut vulnmap: HashMap<&str, Vulns> = HashMap::new();
-    let dep_tree = get_dep_tree(&data).await;
-    for comp in data.iter_component() {
-        info!("Getting vuln info for {:?}...", &comp);
-        let vuln: Vulns = Vulns::new(get_osv_vulnerability(&comp.purl).await);
-        vulnmap.insert(&comp.purl, vuln);
-    }
-    info!("Vuln info gathing finished!");
-    info!("Vulnerability Dump: {:?}", &vulnmap);
-    for key in vulnmap.keys() {
-        info!("Purl: {:?}", &key);
-        let deps = flatten_dependencies(key, dep_tree.clone());
-        info!("Deps: {:?}", deps);
+impl VulnDepTree {
+    pub fn new(vul: Vulns, dep: Option<Vec<Depends>>) -> Self {
+        VulnDepTree {
+            vulnerabilities: vul,
+            dependencies: dep,
+        }
     }
 }
 
+impl Results {
+    pub fn new(package: String, vuln_dep_tree: VulnDepTree) -> Self {
+        Results {
+            package: package,
+            vulndeptree: vuln_dep_tree,
+        }
+    }
+}
+
+pub async fn retrieve_sbom_osv_vulns(filepath: &str) {
+    let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
+    let mut vulmap: HashMap<String, Vulns> = HashMap::new();
+    let dep_tree = get_dep_tree(&data).await;
+    let mut osv_results: Vec<Results> = Vec::new();
+    for comp in data.iter_component() {
+        info!("Getting vuln info for {:?}...", &comp);
+        let vuln: Vulns = Vulns::new(get_osv_vulnerability(&comp.purl).await);
+        vulmap.insert(comp.purl.clone(), vuln);
+    }
+    info!("Vuln info gathing finished!");
+    info!("OSV-NVD Dependency Analysis in progress...");
+    for key in vulmap.keys() {
+        let direct_vulns = vulmap.get(key).expect("");
+        let deps = flatten_dependencies(key, dep_tree.clone());
+        let mut osv_dep: Vec<Depends> = Vec::new();
+        for dep in deps {
+            osv_dep.push(get_package_vulnmap(dep, vulmap.clone()).await);
+        }
+        let osv_vuldeptree: VulnDepTree = VulnDepTree::new(direct_vulns.clone(), Some(osv_dep));
+        let temp_result = Results::new(key.to_string(), osv_vuldeptree);
+        osv_results.push(temp_result);
+    }
+    let json_x = to_string_pretty(&osv_results).expect("Failed to serialize JSON");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open("osv_dep_analysis.json")
+        .expect("File creation failed");
+    let json_str = to_string_pretty(&json_x).expect("Failed to serialize JSON");
+    file.write_all(json_str.as_bytes()).expect("Writing failed");
+    info!("OSV-NVD Dependency Analysis Completed!");
+}
+
+pub async fn get_package_vulnmap(key: String, vulmap: HashMap<String, Vulns>) -> Depends {
+    match vulmap.get(&key) {
+        Some(vuln) => Depends::new(key, vuln.clone()),
+        None => panic!("Impossible! Key not found in vulmap: {}", key),
+    }
+}
 pub async fn get_osv_vulnerability(purl: &str) -> Option<Vec<Vulnerability>> {
     get_osv_response((&purl).to_string()).await
 }

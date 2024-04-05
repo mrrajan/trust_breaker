@@ -20,5 +20,5 @@ async fn main() {
         ),
     ])
     .unwrap();
-    osv_nvd::retrieve_sbom_purl_vulns("/home/rajanr/project-bom.json").await;
+    osv_nvd::retrieve_sbom_osv_vulns("<SBOM Directory>").await;
 }
