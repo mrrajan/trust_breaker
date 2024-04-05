@@ -1,3 +1,6 @@
+mod osv_nvd;
+mod sbom_cdx;
+mod exhort_api_lib;
 use std::process::Command;
 
 pub fn run_command(command: &str, args: &[&str]) -> Vec<u8> {
