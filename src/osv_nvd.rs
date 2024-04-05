@@ -1,3 +1,4 @@
+use crate::sbom_cdx;
 use serde::de::value::StringDeserializer;
 use serde_derive::{Serialize, Deserialize};
 use tokio::fs::File;
@@ -6,48 +7,6 @@ use std::collections::{HashMap, HashSet};
 use serde_json::Value;
 use log::{info, error};
 use simplelog::*;
-
-#[derive(Serialize,Deserialize,Debug)]
-pub struct Component{
-    name: String
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Metadata{
-    component: Option<Component>
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Components{
-    purl: String
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Dependencies{
-    #[serde(rename = "ref")]
-    dependency_ref: String,
-    dependsOn: Option<Vec<String>>
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CycloneDXBOM{
-    bomFormat: String,
-    specVersion: String,
-    serialNumber: Option<String>,
-    metadata: Option<Metadata>,
-    components: Vec<Components>,
-    dependencies: Option<Vec<Dependencies>>
-}
-
-impl CycloneDXBOM{
-    pub fn iter_component(&self) -> impl Iterator<Item = &Components>{
-        self.components.iter()
-    }
-    pub fn iter_dependents(&self) -> impl Iterator<Item = &Dependencies>{
-        self.dependencies.iter().flatten()
-    }
-
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Vulnerability{
@@ -134,15 +93,11 @@ impl Results {
 }
 
 pub async fn retrieve_sbom_purl_vulns(filepath: &str){
-    let mut file = File::open(filepath).await.expect("Error opening the file");
-    let mut content_str = String::new();
-    file.read_to_string(&mut content_str).await.expect("");
-    let data: CycloneDXBOM = serde_json::from_str(&content_str).expect("Error converting json");
+    let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
     let mut vulnmap: HashMap<&str, Vulns> = HashMap::new();
-    let mut dependencies: Option<Vec<String>> = None;
     let dep_tree = get_dep_tree(&data).await;
     for comp in data.iter_component(){
-        info!("Getting vuln info for {:?}...", &comp.purl);
+        info!("Getting vuln info for {:?}...", &comp);
         let vuln: Vulns = Vulns::new(get_osv_vulnerability(&comp.purl).await);
         vulnmap.insert(&comp.purl, vuln);
     }
@@ -255,7 +210,7 @@ pub async fn get_nvd(cve: &str)-> Value{
     base
 }
 
-pub async fn get_dep_tree(data: &CycloneDXBOM)->HashMap<&str, Option<Vec<String>>>{
+pub async fn get_dep_tree(data: &sbom_cdx::CycloneDXBOM)->HashMap<&str, Option<Vec<String>>>{
     let mut deptree: HashMap<&str, Option<Vec<String>>> = HashMap::new();
     for comp in data.iter_component(){
         let mut dependencies: Option<Vec<String>> = None;
