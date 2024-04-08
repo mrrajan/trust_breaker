@@ -1,4 +1,4 @@
-mod exhort_api_lib;
+mod exhort;
 mod osv_nvd;
 mod sbom_cdx;
 use std::process::Command;

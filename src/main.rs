@@ -1,4 +1,4 @@
-mod exhort_api_lib;
+mod exhort;
 mod osv_nvd;
 mod sbom_cdx;
 use log::{error, info};
@@ -6,6 +6,7 @@ use simplelog::*;
 
 #[tokio::main]
 async fn main() {
+    let sbom_file = "<SBOM Directory>";
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Info,
@@ -20,5 +21,6 @@ async fn main() {
         ),
     ])
     .unwrap();
-    osv_nvd::retrieve_sbom_osv_vulns("<SBOM Directory>").await;
+    osv_nvd::retrieve_sbom_osv_vulns(&sbom_file).await;
+    exhort::get_exhort_response(sbom_file).await;
 }

@@ -10,17 +10,17 @@ use std::io::Write;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Vulnerability {
-    CVE_ID: String,
-    CVSSScore: String,
+    id: String,
+    cvssScore: String,
 }
 
 impl Vulnerability {
     fn new(cve: &str, cvss: &str) -> Self {
         Vulnerability {
-            CVE_ID: cve.to_string(),
-            CVSSScore: cvss.to_string(),
+            id: cve.to_string(),
+            cvssScore: cvss.to_string(),
         }
     }
 }
@@ -75,7 +75,8 @@ impl OsvVulns {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Results {
-    package: String,
+    #[serde(rename="ref")]
+    reference: String,
     vulndeptree: VulnDepTree,
 }
 
@@ -85,7 +86,7 @@ pub struct VulnDepTree {
     dependencies: Option<Vec<Depends>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Depends {
     package: String,
     vulnerabilities: Vulns,
@@ -112,7 +113,7 @@ impl VulnDepTree {
 impl Results {
     pub fn new(package: String, vuln_dep_tree: VulnDepTree) -> Self {
         Results {
-            package: package,
+            reference: package,
             vulndeptree: vuln_dep_tree,
         }
     }
@@ -141,16 +142,16 @@ pub async fn retrieve_sbom_osv_vulns(filepath: &str) {
         let temp_result = Results::new(key.to_string(), osv_vuldeptree);
         osv_results.push(temp_result);
     }
-    let json_x = to_string_pretty(&osv_results).expect("Failed to serialize JSON");
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
-        .append(true)
+        .truncate(true)
         .open("osv_dep_analysis.json")
         .expect("File creation failed");
-    let json_str = to_string_pretty(&json_x).expect("Failed to serialize JSON");
+    let json_str = to_string_pretty(&osv_results).expect("Failed to serialize JSON");
     file.write_all(json_str.as_bytes()).expect("Writing failed");
     info!("OSV-NVD Dependency Analysis Completed!");
+    let vulnerable_dependencies: HashMap<String, Vulns>= get_dep_with_vuln(vulmap);
 }
 
 pub async fn get_package_vulnmap(key: String, vulmap: HashMap<String, Vulns>) -> Depends {
@@ -193,7 +194,8 @@ pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
             }
         }
     }
-    Some(vulns)
+    let unique:Vec<_> = vulns.clone().into_iter().collect::<HashSet<_>>().into_iter().collect();
+    Some(unique)
 }
 
 pub async fn retrieve_osv_ghsa(purl: String) -> OsvQuerybatchResponse {
@@ -291,4 +293,17 @@ pub fn flatten_dependencies(purl: &str, deptree: HashMap<&str, Option<Vec<String
     }
     let unique_flatdep = flatdep.into_iter().collect::<HashSet<_>>().into_iter().collect();
     unique_flatdep
+}
+
+pub fn get_dep_with_vuln(vulnmap: HashMap<String, Vulns>) -> HashMap<String, Vulns>{
+    let mut depwithvuln: HashMap<String, Vulns> = HashMap::new();
+    for (package, vuln) in vulnmap{
+        if let Some(ref temp) = vuln.vulnerabilities{
+            if !(temp.is_empty()){
+                depwithvuln.insert(package, vuln);
+            }
+
+        }
+    }
+    depwithvuln
 }
