@@ -10,78 +10,78 @@ use serde_json::to_string_pretty;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExhortResponse{
-    providers: ResponseContent,
+    pub providers: ResponseContent,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResponseContent{
     #[serde(rename = "trusted-content")]
-    trustedcontent: Status,
+    pub trustedcontent: Status,
     #[serde(rename="osv-nvd")]
-    osvnvd: OSVNVD
+    pub osvnvd: OSVNVD
 
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Status {
-    status: Code
+    pub status: Code
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Code {
-    code: u32
+    pub code: u32
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVNVD {
-    status: Code,
-    sources: OSVSources
+    pub status: Code,
+    pub sources: OSVSources
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVSources {
     #[serde(rename="osv-nvd")]
-    osvnvd: OSVDependencies,
+    pub osvnvd: OSVDependencies,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVDependencies {
-    dependencies: Vec<ApiResponse>
+    pub dependencies: Vec<ApiResponse>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse {
     #[serde(rename = "ref")]
-    reference: String,
-    issues: Vec<Issues>,
-    transitive: Vec<Transitive>,
+    pub reference: String,
+    pub issues: Vec<Issues>,
+    pub transitive: Vec<Transitive>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Issues {
     #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
+    pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    title: Option<String>,
+    pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    severity: Option<String>,
+    pub severity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cvssScore: Option<f64>,
+    pub cvssScore: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cves: Option<Vec<String>>,
+    pub cves: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cvss: Option<CVSS>,
+    pub cvss: Option<CVSS>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CVSS {
     exploitCodeMaturity: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize,Clone)]
 pub struct Transitive {
     #[serde(rename = "ref")]
-    reference: String,
-    issues: Option<Vec<Issues>>,
+    pub reference: String,
+    pub issues:Vec<Issues>,
 }
 
 pub async fn get_exhort_response(file_path: &str) -> ExhortResponse {

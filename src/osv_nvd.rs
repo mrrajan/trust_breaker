@@ -1,7 +1,6 @@
 use crate::sbom_cdx;
 use log::{error, info};
 use reqwest::{Response, StatusCode};
-use serde::de::value::StringDeserializer;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{to_string_pretty, Value};
 use simplelog::*;
@@ -13,8 +12,8 @@ use tokio::io::AsyncReadExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Vulnerability {
-    id: String,
-    cvssScore: String,
+    pub id: String,
+    pub cvssScore: String,
 }
 
 impl Vulnerability {
@@ -75,18 +74,18 @@ impl OsvVulns {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Results {
+pub struct OSVResults {
     #[serde(rename="ref")]
-    reference: String,
-    issues: Option<Vec<Vulnerability>>,
-    transitive: Option<Vec<Depends>>,
+    pub reference: String,
+    pub issues: Option<Vec<Vulnerability>>,
+    pub transitive: Option<Vec<Depends>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Depends {
     #[serde(rename="ref")]
-    reference: String,
-    vulnerabilities: Option<Vec<Vulnerability>>,
+    pub reference: String,
+    pub vulnerabilities: Option<Vec<Vulnerability>>,
 }
 
 impl Depends {
@@ -98,9 +97,9 @@ impl Depends {
     }
 }
 
-impl Results {
+impl OSVResults {
     pub fn new(reference: String, issues: Option<Vec<Vulnerability>>, transitive: Option<Vec<Depends>>) -> Self {
-        Results {
+        OSVResults {
             reference: reference,
             issues: issues,
             transitive:transitive
@@ -108,11 +107,11 @@ impl Results {
     }
 }
 
-pub async fn retrieve_sbom_osv_vulns(filepath: &str) {
+pub async fn retrieve_sbom_osv_vulns(filepath: &str) ->(Vec<OSVResults>, HashMap<String, Option<Vec<Vulnerability>>>) {
     let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
     let mut vulmap: HashMap<String, Option<Vec<Vulnerability>>> = HashMap::new();
     let dep_tree = get_dep_tree(&data).await;
-    let mut osv_results: Vec<Results> = Vec::new();
+    let mut osv_results: Vec<OSVResults> = Vec::new();
     for comp in data.iter_component() {
         info!("Getting vuln info for {:?}...", &comp);
         let purl_vuln:Option<Vec<Vulnerability>> = get_osv_vulnerability(&comp.purl).await;
@@ -127,7 +126,7 @@ pub async fn retrieve_sbom_osv_vulns(filepath: &str) {
         for dep in deps {
             osv_dep.push(get_package_vulnmap(dep, vulmap.clone()).await);
         }
-        let temp_result = Results::new(key.to_string(), direct_vulns.clone(), Some(osv_dep));
+        let temp_result = OSVResults::new(key.to_string(), direct_vulns.clone(), Some(osv_dep));
         osv_results.push(temp_result);
     }
     let mut file = OpenOptions::new()
@@ -139,7 +138,8 @@ pub async fn retrieve_sbom_osv_vulns(filepath: &str) {
     let json_str = to_string_pretty(&osv_results).expect("Failed to serialize JSON");
     file.write_all(json_str.as_bytes()).expect("Writing failed");
     info!("OSV-NVD Dependency Analysis Completed!");
-    let vulnerable_dependencies: HashMap<String, Option<Vec<Vulnerability>>>= get_dep_with_vuln(vulmap);
+    let vulnerable_dependencies: HashMap<String, Option<Vec<Vulnerability>>>= remove_dep_without_vulns(vulmap);
+    (osv_results, vulnerable_dependencies)
 }
 
 pub async fn get_package_vulnmap(key: String, vulmap: HashMap<String, Option<Vec<Vulnerability>>>) -> Depends {
@@ -292,7 +292,7 @@ pub fn flatten_dependencies(purl: &str, deptree: HashMap<&str, Option<Vec<String
     unique_flatdep
 }
 
-pub fn get_dep_with_vuln(vulnmap: HashMap<String, Option<Vec<Vulnerability>>>) -> HashMap<String, Option<Vec<Vulnerability>>>{
+pub fn remove_dep_without_vulns(vulnmap: HashMap<String, Option<Vec<Vulnerability>>>) -> HashMap<String, Option<Vec<Vulnerability>>>{
     let mut depwithvuln: HashMap<String, Option<Vec<Vulnerability>>> = HashMap::new();
     for (reference, vuln) in vulnmap{
         if !(vuln.clone().expect("").is_empty()){
