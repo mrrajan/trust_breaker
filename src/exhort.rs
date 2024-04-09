@@ -1,8 +1,10 @@
+use log::error;
 use std::fs::OpenOptions;
 use std::io::Write;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use reqwest;
+use reqwest::StatusCode;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
@@ -94,11 +96,14 @@ pub async fn get_exhort_response(file_path: &str) -> ExhortResponse {
         .body(content_str)
         .send()
         .await
-        .unwrap()
-        .text()
-        .await
-        .expect("msg");
-    let parsed_data: ExhortResponse = serde_json::from_str(&response).expect("Failed to parse data to Json");
+        .unwrap();
+    let status = response.status();
+    let text_res = response.text().await.unwrap();
+    if !(status == StatusCode::OK){
+        error!("NVD API failed with Error body: {}",text_res);
+    }
+
+    let parsed_data: ExhortResponse =  serde_json::from_str(&text_res).expect("Failure");
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
