@@ -11,6 +11,7 @@ use crate::osv_nvd::{OSVResults, Vulnerability};
 #[tokio::main]
 async fn main() {
     let sbom_file = "<SBOM Directory>";
+    let exhort_api = "<Exhort API>";
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Info,
@@ -26,6 +27,7 @@ async fn main() {
     ])
     .unwrap();
     let (osvresponse, mut purl_with_vuln) = osv_nvd::retrieve_sbom_osv_vulns(&sbom_file).await;
-    let exhort:ExhortResponse = exhort::get_exhort_response(sbom_file).await;
+    let exhort:ExhortResponse = exhort::get_exhort_response(sbom_file, exhort_api).await;
     compare::compare_exhort_osvnvd(exhort, osvresponse, purl_with_vuln).await;
+    info!("Validation completed, Please check the logs for the results");
 }

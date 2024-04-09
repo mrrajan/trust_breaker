@@ -23,7 +23,8 @@ cargo build
 ```
 ## Usage
 - Open the [main.rs](src/main.rs) file under the `src` directory
-- Update the CycloneDX SBOM file [path](https://github.com/mrrajan/exhort_validator/blob/29c5593d99d4bf46efc999c21fd186aafa806024/src/main.rs#L13) on `let sbom_file = "<SBOM Directory>";` The file path should be absolute like `/home/<user>/SBOM/keycloak_cyclonedx_sbom.json`
+- Update the CycloneDX SBOM file path on `let sbom_file = "<SBOM Directory>";` The file path should be absolute like `/home/<user>/SBOM/keycloak_cyclonedx_sbom.json`
+- Update the Exhort API URL on `let exhort_api = "<Exhort API>";` 
 - Run the command `cargo run`
 ## Logs and Outputs
 \

@@ -84,11 +84,11 @@ pub struct Transitive {
     pub issues:Vec<Issues>,
 }
 
-pub async fn get_exhort_response(file_path: &str) -> ExhortResponse {
+pub async fn get_exhort_response(file_path: &str, exhort_api: &str) -> ExhortResponse {
     let mut file = File::open(file_path).await.expect("Error opening the file");
     let mut content_str = String::new();
     file.read_to_string(&mut content_str).await.expect("");
-    let url = "https://rhda.rhcloud.com/api/v4/analysis";
+    let url = exhort_api;
     let response = reqwest::Client::new()
         .post(url.to_owned())
         .header("Content-Type", "application/vnd.cyclonedx+json")
