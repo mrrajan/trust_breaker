@@ -15,7 +15,7 @@ pub struct Metadata {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Components {
-    pub purl: String,
+    pub purl: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

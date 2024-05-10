@@ -113,9 +113,16 @@ pub async fn retrieve_sbom_osv_vulns(filepath: &str) ->(Vec<OSVResults>, HashMap
     let dep_tree = get_dep_tree(&data).await;
     let mut osv_results: Vec<OSVResults> = Vec::new();
     for comp in data.iter_component() {
-        info!("Getting vuln info for {:?}...", &comp);
-        let purl_vuln:Option<Vec<Vulnerability>> = get_osv_vulnerability(&comp.purl).await;
-        vulmap.insert(comp.purl.clone(), purl_vuln);
+        match &comp.purl{
+            Some(purl) =>{
+                info!("Getting vuln info for {:?}...", &purl);
+                let purl_vuln:Option<Vec<Vulnerability>> = get_osv_vulnerability(&purl).await;
+                vulmap.insert(purl.clone(), purl_vuln);
+            }
+            None =>{
+                info!("No Package URL found");
+            }
+        }
     }
     info!("Vuln info gathing finished!");
     info!("OSV-NVD Dependency Analysis in progress...");
@@ -264,17 +271,25 @@ pub async fn get_nvd(cve: &str) -> Value {
 pub async fn get_dep_tree(data: &sbom_cdx::CycloneDXBOM) -> HashMap<&str, Option<Vec<String>>> {
     let mut deptree: HashMap<&str, Option<Vec<String>>> = HashMap::new();
     for comp in data.iter_component() {
-        let mut dependencies: Option<Vec<String>> = None;
-        if !(data.dependencies == None) {
-            for dep in data.iter_dependents() {
-                if comp.purl == dep.dependency_ref {
-                    if let Some(dependency) = &dep.dependsOn {
-                        dependencies = dep.dependsOn.clone();
+        match &comp.purl{
+            Some(purl) =>{
+                let mut dependencies: Option<Vec<String>> = None;
+                if !(data.dependencies == None) {
+                    for dep in data.iter_dependents() {
+                        if *purl == dep.dependency_ref {
+                            if let Some(dependency) = &dep.dependsOn {
+                                dependencies = dep.dependsOn.clone();
+                            }
+                        }
                     }
                 }
+                deptree.insert(purl, dependencies);
+            }
+            None =>{
+                info!("No Package URL found");
             }
         }
-        deptree.insert(&comp.purl, dependencies);
+
     }
     deptree
 }

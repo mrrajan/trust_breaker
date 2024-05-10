@@ -1,3 +1,5 @@
+use serde_json::{json, to_string_pretty};
+use log::info;
 use log::error;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -6,7 +8,9 @@ use tokio::io::AsyncReadExt;
 use reqwest;
 use reqwest::StatusCode;
 use serde_derive::{Deserialize, Serialize};
-use serde_json::to_string_pretty;
+use serde_json::from_str;
+use serde_json::Value;
+use std::{process, panic};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ExhortResponse{
@@ -19,7 +23,6 @@ pub struct ResponseContent{
     pub trustedcontent: Status,
     #[serde(rename="osv-nvd")]
     pub osvnvd: OSVNVD
-
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -87,6 +90,7 @@ pub struct Transitive {
 pub async fn get_exhort_response(file_path: &str, exhort_api: &str) -> ExhortResponse {
     let mut file = File::open(file_path).await.expect("Error opening the file");
     let mut content_str = String::new();
+    let mut exhort_response: ExhortResponse;
     file.read_to_string(&mut content_str).await.expect("");
     let url = exhort_api;
     let response = reqwest::Client::new()
@@ -102,15 +106,19 @@ pub async fn get_exhort_response(file_path: &str, exhort_api: &str) -> ExhortRes
     if !(status == StatusCode::OK){
         error!("NVD API failed with Error body: {}",text_res);
     }
-
-    let parsed_data: ExhortResponse =  serde_json::from_str(&text_res).expect("Failure");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open("exhort.json")
-        .expect("File creation failed");
-    let json_str = to_string_pretty(&parsed_data).expect("Failed to serialize JSON");
-    file.write_all(json_str.as_bytes()).expect("Writing failed");
-    parsed_data
+    if let Ok(parsed_data) = from_str::<ExhortResponse>(&text_res){
+        exhort_response = parsed_data;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("exhort.json")
+            .expect("File creation failed");
+        let json_str = to_string_pretty(&exhort_response).expect("Failed to serialize JSON");
+        file.write_all(json_str.as_bytes()).expect("Writing failed");
+    }else{
+        info!("Error while Parsing the response, The response might not have any vulnerabilities");
+        process::exit(1);
+    }
+    exhort_response
 }
