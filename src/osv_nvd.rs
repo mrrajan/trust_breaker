@@ -128,7 +128,7 @@ pub async fn retrieve_sbom_osv_vulns(filepath: &str) ->(Vec<OSVResults>, HashMap
     info!("OSV-NVD Dependency Analysis in progress...");
     for key in vulmap.keys() {
         let direct_vulns = vulmap.get(key).expect("");
-        let deps = flatten_dependencies(key, dep_tree.clone());
+        let deps = flatten_dependencies(key, dep_tree.clone(), None);
         let mut osv_dep: Vec<Depends> = Vec::new();
         for dep in deps {
             osv_dep.push(get_package_vulnmap(dep, vulmap.clone()).await);
@@ -294,16 +294,21 @@ pub async fn get_dep_tree(data: &sbom_cdx::CycloneDXBOM) -> HashMap<&str, Option
     deptree
 }
 
-pub fn flatten_dependencies(purl: &str, deptree: HashMap<&str, Option<Vec<String>>>) -> Vec<String> {
-    let mut flatdep: Vec<String> = Vec::new();
+pub fn flatten_dependencies(purl: &str, deptree: HashMap<&str, Option<Vec<String>>>, exist_dep: Option<HashSet<String>>) -> Vec<String> {
+    let mut flat_hs: HashSet<String> = exist_dep.unwrap_or_else(HashSet::new);
     if let Some(dependency) = deptree.get(purl).cloned().flatten() {
-        flatdep = dependency.clone();
-        for dep in dependency {
-            let x = flatten_dependencies(&dep, deptree.clone());
-            flatdep.extend(x);
+        for dep in dependency{
+            if flat_hs.contains(&dep){
+                continue;
+            }
+            flat_hs.insert(dep.clone());
+            let x = flatten_dependencies(&dep, deptree.clone(), Some(flat_hs.clone()));
+            for y in x{
+                flat_hs.insert(y);
+            }
         }
     }
-    let unique_flatdep = flatdep.into_iter().collect::<HashSet<_>>().into_iter().collect();
+    let unique_flatdep = flat_hs.into_iter().collect();
     unique_flatdep
 }
 
