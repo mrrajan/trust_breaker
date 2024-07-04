@@ -9,6 +9,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+use cvss::v3::Base;
+use std::str::FromStr;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Vulnerability {
@@ -17,10 +19,10 @@ pub struct Vulnerability {
 }
 
 impl Vulnerability {
-    fn new(cve: &str, cvss: &str) -> Self {
+    fn new(cve: &str, cvss: String) -> Self {
         Vulnerability {
             id: cve.to_string(),
-            cvssScore: cvss.to_string(),
+            cvssScore: cvss,
         }
     }
 }
@@ -53,12 +55,20 @@ pub struct OsvVulnId {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVAlias {
     aliases: Option<Vec<String>>,
+    severity: Option<Vec<OSVSeverity>>,
 }
 
 impl OSVAlias {
     pub fn get_alias(&self) -> Option<&Vec<String>> {
         self.aliases.as_ref()
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OSVSeverity{
+    #[serde(rename="type")]
+    cvsstype: String,
+    score: String,
 }
 
 impl OsvQuerybatchResponse {
@@ -176,12 +186,24 @@ pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
                             let cves: OSVAlias = get_osv_cve(ghsa.id.clone()).await;
                             for cve in cves.aliases {
                                 for id in cve {
+                                    let mut vector= String::new();
                                     if id.contains("CVE") {
-                                        let nvd_score = get_nvd(&id).await;
-                                        let vuln: Vulnerability = Vulnerability::new(&id, &nvd_score.to_string());
+                                        for severity in &cves.severity{
+                                            for cvss in severity{
+                                                if cvss.score.contains("3.1"){
+                                                    vector = cvss.score.clone();
+                                                }
+                                            }
+                                        }
+                                        let mut osv_score = String::new();
+                                        if !vector.is_empty(){
+                                            osv_score = get_cvss(vector).await;
+                                        }
+                                        let vuln: Vulnerability = Vulnerability::new(&id, osv_score);
                                         vulns.push(vuln);
                                     }
                                 }
+
                             }
                         }
                     }
@@ -246,6 +268,11 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
     osv_response
 }
 
+pub async fn get_cvss(vector: String) -> String{
+    Base::from_str(&vector).expect("Unable to convert the Vector to CVSS").score().value().to_string()
+}
+
+/* Obselete - using CVSS crate to retrieve CVSS from vector
 pub async fn get_nvd(cve: &str) -> Value {
     let url = "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=".to_owned() + cve;
     let json_response: serde_json::Value = get_json_response(url).await;
@@ -267,7 +294,7 @@ pub async fn get_nvd(cve: &str) -> Value {
     }
     base
 }
-
+*/
 pub async fn get_dep_tree(data: &sbom_cdx::CycloneDXBOM) -> HashMap<&str, Option<Vec<String>>> {
     let mut deptree: HashMap<&str, Option<Vec<String>>> = HashMap::new();
     for comp in data.iter_component() {

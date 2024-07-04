@@ -1,5 +1,5 @@
 mod exhort;
-mod osv_nvd;
+mod osv;
 mod sbom_cdx;
 use std::process::Command;
 

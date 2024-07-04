@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use log::{info, error};
 use crate::exhort::{ExhortResponse, Issues};
-use crate::osv_nvd::{OSVResults, Vulnerability};
+use crate::osv::{OSVResults, Vulnerability};
 
 pub async fn compare_exhort_osvnvd(exhort: ExhortResponse, osv_nvd: Vec<OSVResults>, mut purl_with_vuln:HashMap<String, Option<Vec<Vulnerability>>>){
     info!("Comparing the results!");
-    let exhort_dependencies = exhort.providers.osvnvd.sources.osvnvd.dependencies;
+    let exhort_dependencies = exhort.providers.osv.sources.osv.dependencies;
     for exh in exhort_dependencies{
         for ov in &osv_nvd{
             if exh.reference.clone() == ov.reference.clone(){
@@ -44,7 +44,7 @@ pub fn compare_vuln(purl: &str, exhort_direct_issues: Vec<Issues>, osv_direct_is
             }
         }
         if !found{
-            error!("For PURL {:?}, Vulnerability {:?} not available in OSV_NVD, but reported on Exhort!", purl, ex_issue);
+            error!("For PURL {:?}, Vulnerability {:?} not available in OSV, but reported on Exhort!", purl, ex_issue);
         }
     }
     for osv_issue in &osv_issues{
@@ -56,7 +56,7 @@ pub fn compare_vuln(purl: &str, exhort_direct_issues: Vec<Issues>, osv_direct_is
             }
         }
         if !found{
-            error!("For PURL {:?}, Vulnerability {:?} not available in Exhort, but available on OSV_NVD!",purl, osv_issue);
+            error!("For PURL {:?}, Vulnerability {:?} not available in Exhort, but available on OSV!",purl, osv_issue);
         }
     }
 }

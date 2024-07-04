@@ -21,8 +21,7 @@ pub struct ExhortResponse{
 pub struct ResponseContent{
     #[serde(rename = "trusted-content")]
     pub trustedcontent: Status,
-    #[serde(rename="osv-nvd")]
-    pub osvnvd: OSVNVD
+    pub osv: OSV
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -35,15 +34,14 @@ pub struct Code {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct OSVNVD {
+pub struct OSV {
     pub status: Code,
     pub sources: OSVSources
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVSources {
-    #[serde(rename="osv-nvd")]
-    pub osvnvd: OSVDependencies,
+    pub osv: OSVDependencies,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
