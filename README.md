@@ -1,11 +1,8 @@
 # Exhort Validator
 
-Exhort Validator is a rust based validation tool to verify the Dependency analytics report generated from [Exhort API](https://github.com/RHEcosystemAppEng/exhort) for the give CycloneDX SBOM file.\
+Exhort Validator is a Rust-based tool designed to generate JSON vulnerability reports from a given CycloneDX SBOM file. It extracts package URLs from the *components* section and flattens the dependencies for each package using the *dependencies* section. By aggregating vulnerability information for each package and its dependencies, Exhort Validator produces a JSON report that includes both direct and transitive vulnerabilities. The vulnerability data for the packages is sourced from the OSV database.\
 \
-Exhort Validator retrieves the vulnerability information from OSV and NVD Databases for each package URL from the input SBOM file. It is capable of flattening out the dependencies for each package from its child and child of child dependencies.\
-By aligning the vulnerability for each package and its dependencies, Exhort Validator produces a Json report with direct and transitive vulnerabilities for each package URL \
-\
-This information is validated against the Dependency analytics report generated from Exhort API.
+Additionally, the tool can compare the results against a specified [Exhort API](https://github.com/RHEcosystemAppEng/exhort) and generate a log file that highlights any discrepancies.
 
 ## Table of Contents
 
@@ -13,7 +10,7 @@ This information is validated against the Dependency analytics report generated 
 - [Usage](#usage)
 
 ## Pre-Requisites
-Make sure [Rust](https://doc.rust-lang.org/book/ch01-01-installation.html) is installed on your machine, That's all you need!
+Make sure [Rust](https://doc.rust-lang.org/book/ch01-01-installation.html) installed on your machine, That's all you need!
 
 ## Installation
 ```sh
@@ -24,7 +21,7 @@ cargo build
 ## Usage
 - Open the [main.rs](src/main.rs) file under the `src` directory
 - Update the CycloneDX SBOM file path on `let sbom_file = "<SBOM Directory>";` The file path should be absolute like `/home/<user>/SBOM/keycloak_cyclonedx_sbom.json`
-- Update the Exhort API URL on `let exhort_api = "<Exhort API>";` 
+- Update the Exhort API URL on `let exhort_api = "<Exhort API>";` - This field is optional and by specifying, the tool retrieves the JSON output from Exhort API and runs the comparison between the results. 
 - Run the command `cargo run`
 ## Logs and Outputs
 \
