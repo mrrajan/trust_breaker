@@ -197,7 +197,7 @@ pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
                                         }
                                         let mut osv_score = String::new();
                                         if !vector.is_empty(){
-                                            osv_score = get_cvss(vector).await;
+                                            osv_score = get_cvss(vector, &id.clone()).await;
                                         }
                                         let vuln: Vulnerability = Vulnerability::new(&id, osv_score);
                                         vulns.push(vuln);
@@ -268,8 +268,17 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
     osv_response
 }
 
-pub async fn get_cvss(vector: String) -> String{
-    Base::from_str(&vector).expect("Unable to convert the Vector to CVSS").score().value().to_string()
+pub async fn get_cvss(vector: String, id: &str) -> String{
+    let mut cvss = String::new();
+    match Base::from_str(&vector){
+        Ok(base) =>{
+            cvss = base.score().value().to_string();
+        }
+        Err(e) =>{
+            error!("Error occurred {} for CVE {} with vector {}",e,id, vector);
+        }
+    }
+    cvss
 }
 
 /* Obselete - using CVSS crate to retrieve CVSS from vector
