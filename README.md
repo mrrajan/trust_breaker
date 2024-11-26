@@ -19,10 +19,9 @@ cd trust_breaker
 cargo build
 ```
 ## Usage
-- Open the [main.rs](src/main.rs) file under the `src` directory
-- Update the CycloneDX SBOM file path on `let sbom_file = "<SBOM Directory>";` The file path should be absolute like `/home/<user>/SBOM/keycloak_cyclonedx_sbom.json`
-- Update the Exhort API URL on `let exhort_api = "<Exhort API>";` - This field is optional and by specifying, the tool retrieves the JSON output from Exhort API and runs the comparison between the results. 
-- Run the command `cargo run`
+- `cargo run -- -s /home/<user>/SBOM/keycloak_cyclonedx_sbom.json` 
+- The `-s`/`--sbom_file` argument is required and should contain an absolute path to your CycloneDX SBOM file.
+- The `-e`/`--exhort_api` argument expects an Exhort API URL. This field is optional and by specifying, the tool retrieves the JSON output from Exhort API and runs the comparison between the results. 
 ## Logs and Outputs
 \
 The script generates three files,

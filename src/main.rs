@@ -7,11 +7,30 @@ use log::{error, info};
 use simplelog::*;
 use crate::exhort::ExhortResponse;
 use crate::osv::{OSVResults, Vulnerability};
+use clap::{Command, Arg};
 
 #[tokio::main]
 async fn main() {
-    let sbom_file = "<SBOM Directory>";
-    let exhort_api = "<Exhort API>";
+    let matches = Command::new("Trust Breaker")
+        .about("Validates SBOM files against OSV vulnerabilities and optionally compares with Exhort API results.")
+        .arg(
+            Arg::new("sbom_file")
+                .help("An absolute path to the CycloneDX SBOM file")
+                .short('s')
+                .long("sbom_file")
+                .required(true)
+        )
+        .arg(
+            Arg::new("exhort_api")
+                .help("Exhort API URL (optional)")
+                .short('e')
+                .long("exhort_api")
+                .required(false)
+        )
+        .get_matches();
+
+    let sbom_file = matches.get_one::<String>("sbom_file").unwrap();
+    let exhort_api = matches.get_one::<String>("exhort_api").map(|s| s.as_str()).unwrap_or(""); 
     CombinedLogger::init(vec![
         TermLogger::new(
             LevelFilter::Info,
