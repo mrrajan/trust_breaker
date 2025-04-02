@@ -1,8 +1,6 @@
 # Trust Breaker
 
 Trust Breaker is a Rust-based tool designed to generate JSON vulnerability reports from a given CycloneDX SBOM file. It extracts package URLs from the *components* section and flattens the dependencies for each package using the *dependencies* section. By aggregating vulnerability information for each package and its dependencies, Trust Breaker produces a JSON report that includes both direct and transitive vulnerabilities. The vulnerability data for the packages is sourced from the OSV database.\
-\
-Additionally, the tool can compare the results against a specified [Exhort API](https://github.com/RHEcosystemAppEng/exhort) and generate a log file that highlights any discrepancies.
 
 ## Table of Contents
 
@@ -21,13 +19,11 @@ cargo build
 ## Usage
 - `cargo run -- -s /home/<user>/SBOM/keycloak_cyclonedx_sbom.json` 
 - The `-s`/`--sbom_file` argument is required and should contain an absolute path to your CycloneDX SBOM file.
-- The `-e`/`--exhort_api` argument expects an Exhort API URL. This field is optional and by specifying, the tool retrieves the JSON output from Exhort API and runs the comparison between the results. 
+- The `-t`/`--sbom_type` argument is required and the type of the SBOM file, could be either `cdx` or `spdx`
 ## Logs and Outputs
 \
 The script generates three files,
 - *exhort_validator.log:* Log file, captures the events while running the script
-- *exhort.json:* Captures the Dependency analytics JSON Response from the Exhort API
-- *osv_dep_analysis.json:* Captures the Vulnerability information Json report from the Trust Breaker
+- *<sbom_type>_osv_<timestamp>.json:* Captures the Affected packages and its vulnerabilities in Json format from OSV database
+- *<sbom_type>_osv_<timestamp>.csv:* Captures the Affected packages and its vulnerabilities in CSV format from OSV database
 
-### Limitation
-The current version of Trust Breaker just supports CycloneDX SBOM format. 

@@ -1,42 +1,42 @@
-use serde_json::{json, to_string_pretty};
-use log::info;
 use log::error;
-use std::fs::OpenOptions;
-use std::io::Write;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use log::info;
 use reqwest;
 use reqwest::StatusCode;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::from_str;
 use serde_json::Value;
-use std::{process, panic};
+use serde_json::{json, to_string_pretty};
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::{panic, process};
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ExhortResponse{
+pub struct ExhortResponse {
     pub providers: ResponseContent,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ResponseContent{
+pub struct ResponseContent {
     #[serde(rename = "trusted-content")]
     pub trustedcontent: Status,
-    pub osv: OSV
+    pub osv: OSV,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Status {
-    pub status: Code
+    pub status: Code,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Code {
-    pub code: u32
+    pub code: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSV {
     pub status: Code,
-    pub sources: OSVSources
+    pub sources: OSVSources,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,7 +46,7 @@ pub struct OSVSources {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVDependencies {
-    pub dependencies: Vec<ApiResponse>
+    pub dependencies: Vec<ApiResponse>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,11 +78,11 @@ pub struct CVSS {
     exploitCodeMaturity: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize,Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Transitive {
     #[serde(rename = "ref")]
     pub reference: String,
-    pub issues:Vec<Issues>,
+    pub issues: Vec<Issues>,
 }
 
 pub async fn get_exhort_response(file_path: &str, exhort_api: &str) -> ExhortResponse {
@@ -101,10 +101,10 @@ pub async fn get_exhort_response(file_path: &str, exhort_api: &str) -> ExhortRes
         .unwrap();
     let status = response.status();
     let text_res = response.text().await.unwrap();
-    if !(status == StatusCode::OK){
-        error!("NVD API failed with Error body: {}",text_res);
+    if !(status == StatusCode::OK) {
+        error!("NVD API failed with Error body: {}", text_res);
     }
-    if let Ok(parsed_data) = from_str::<ExhortResponse>(&text_res){
+    if let Ok(parsed_data) = from_str::<ExhortResponse>(&text_res) {
         exhort_response = parsed_data;
         let mut file = OpenOptions::new()
             .write(true)
@@ -114,7 +114,7 @@ pub async fn get_exhort_response(file_path: &str, exhort_api: &str) -> ExhortRes
             .expect("File creation failed");
         let json_str = to_string_pretty(&exhort_response).expect("Failed to serialize JSON");
         file.write_all(json_str.as_bytes()).expect("Writing failed");
-    }else{
+    } else {
         info!("Error while Parsing the response, The response might not have any vulnerabilities");
         process::exit(1);
     }

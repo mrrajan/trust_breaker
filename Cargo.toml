@@ -17,3 +17,5 @@ log = "0.4"
 simplelog = "0.10"
 cvss = { version = "2", features = ["serde"] }
 clap = { version = "4.2", features = ["derive"] }
+chrono = "0.4.37"
+csv = "1.1"

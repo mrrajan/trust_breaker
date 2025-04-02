@@ -46,9 +46,21 @@ impl CycloneDXBOM {
 }
 
 pub async fn get_cdx_purl(filepath: &str) -> CycloneDXBOM {
-    let mut file = File::open(filepath).await.expect("Error reading the file, make sure the path exists");
+    let mut file = File::open(filepath)
+        .await
+        .expect("Error reading the file, make sure the path exists");
     let mut content_str = String::new();
     file.read_to_string(&mut content_str).await.expect("");
     let data: CycloneDXBOM = serde_json::from_str(&content_str).expect("Error converting json");
     data
+}
+
+pub async fn get_cdx_purl_x(components: CycloneDXBOM) -> Vec<String> {
+    let mut purl_reference: Vec<String> = Vec::new();
+    for component in components.components {
+        if let Some(purl) = component.purl {
+            purl_reference.push(purl);
+        }
+    }
+    purl_reference
 }

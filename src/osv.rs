@@ -1,15 +1,15 @@
 use crate::sbom_cdx;
+use chrono;
+use csv::Writer;
+use cvss::v3::Base;
 use log::{error, info};
 use reqwest::{Response, StatusCode};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{to_string_pretty, Value};
-use simplelog::*;
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::Write;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use cvss::v3::Base;
 use std::str::FromStr;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
@@ -65,8 +65,8 @@ impl OSVAlias {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct OSVSeverity{
-    #[serde(rename="type")]
+pub struct OSVSeverity {
+    #[serde(rename = "type")]
     cvsstype: String,
     score: String,
 }
@@ -85,7 +85,7 @@ impl OsvVulns {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVResults {
-    #[serde(rename="ref")]
+    #[serde(rename = "ref")]
     pub reference: String,
     pub issues: Option<Vec<Vulnerability>>,
     pub transitive: Option<Vec<Depends>>,
@@ -93,7 +93,7 @@ pub struct OSVResults {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Depends {
-    #[serde(rename="ref")]
+    #[serde(rename = "ref")]
     pub reference: String,
     pub vulnerabilities: Option<Vec<Vulnerability>>,
 }
@@ -112,51 +112,68 @@ impl OSVResults {
         OSVResults {
             reference: reference,
             issues: issues,
-            transitive:transitive
+            transitive: transitive,
         }
     }
 }
 
-pub async fn retrieve_sbom_osv_vulns(filepath: &str) ->(Vec<OSVResults>, HashMap<String, Option<Vec<Vulnerability>>>) {
-    let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExportHeader {
+    PURL: String,
+    CVE_ID: String,
+    CVSS: String,
+}
+
+pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Result<(), Box<dyn Error>> {
+    let now = chrono::offset::Local::now();
+    let custom_datetime_format = now.format("%Y%m%y_%H%M%S");
+    //let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
     let mut vulmap: HashMap<String, Option<Vec<Vulnerability>>> = HashMap::new();
-    let dep_tree = get_dep_tree(&data).await;
-    let mut osv_results: Vec<OSVResults> = Vec::new();
-    for comp in data.iter_component() {
-        match &comp.purl{
-            Some(purl) =>{
-                info!("Getting vuln info for {:?}...", &purl);
-                let purl_vuln:Option<Vec<Vulnerability>> = get_osv_vulnerability(&purl).await;
-                vulmap.insert(purl.clone(), purl_vuln);
-            }
-            None =>{
-                info!("No Package URL found");
-            }
-        }
+    //let dep_tree = get_dep_tree(&data).await;
+    //let mut osv_results: Vec<OSVResults> = Vec::new();
+    for purl in purls {
+        info!("Getting vuln info for {:?}...", &purl);
+        let purl_vuln: Option<Vec<Vulnerability>> = get_osv_vulnerability(&purl).await;
+        vulmap.insert(purl.clone(), purl_vuln);
     }
+    // for comp in data.iter_component() {
+    //     match &comp.purl{
+    //         Some(purl) =>{
+
+    //         }
+    //         None =>{
+    //             info!("No Package URL found");
+    //         }
+    //     }
+    // }
     info!("Vuln info gathing finished!");
-    info!("OSV-NVD Dependency Analysis in progress...");
-    for key in vulmap.keys() {
-        let direct_vulns = vulmap.get(key).expect("");
-        let deps = flatten_dependencies(key, dep_tree.clone(), None);
-        let mut osv_dep: Vec<Depends> = Vec::new();
-        for dep in deps {
-            osv_dep.push(get_package_vulnmap(dep, vulmap.clone()).await);
-        }
-        let temp_result = OSVResults::new(key.to_string(), direct_vulns.clone(), Some(osv_dep));
-        osv_results.push(temp_result);
-    }
+
+    let vulnerable_dependencies: HashMap<String, Option<Vec<Vulnerability>>> = remove_dep_without_vulns(vulmap);
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open("osv_dep_analysis.json")
+        .open(sbom_type.to_string() + "_osv_" + &custom_datetime_format.to_string() + ".json")
         .expect("File creation failed");
-    let json_str = to_string_pretty(&osv_results).expect("Failed to serialize JSON");
+    let json_str = to_string_pretty(&vulnerable_dependencies).expect("Failed to serialize JSON");
     file.write_all(json_str.as_bytes()).expect("Writing failed");
     info!("OSV-NVD Dependency Analysis Completed!");
-    let vulnerable_dependencies: HashMap<String, Option<Vec<Vulnerability>>>= remove_dep_without_vulns(vulmap);
-    (osv_results, vulnerable_dependencies)
+
+    let mut wtr = Writer::from_path(sbom_type.to_string() + "_osv_" + &custom_datetime_format.to_string() + ".csv")?;
+
+    for (purl, vulnlist) in &vulnerable_dependencies {
+        for vuln in vulnlist {
+            for vul in vuln {
+                let _ = wtr.serialize(ExportHeader {
+                    PURL: purl.to_string(),
+                    CVE_ID: vul.id.clone(),
+                    CVSS: vul.cvssScore.clone(),
+                });
+            }
+        }
+    }
+    let _ = wtr.flush();
+    Ok(())
 }
 
 pub async fn get_package_vulnmap(key: String, vulmap: HashMap<String, Option<Vec<Vulnerability>>>) -> Depends {
@@ -186,24 +203,23 @@ pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
                             let cves: OSVAlias = get_osv_cve(ghsa.id.clone()).await;
                             for cve in cves.aliases {
                                 for id in cve {
-                                    let mut vector= String::new();
+                                    let mut vector = String::new();
                                     if id.contains("CVE") {
-                                        for severity in &cves.severity{
-                                            for cvss in severity{
-                                                if cvss.score.contains("3.1"){
+                                        for severity in &cves.severity {
+                                            for cvss in severity {
+                                                if cvss.score.contains("3.1") {
                                                     vector = cvss.score.clone();
                                                 }
                                             }
                                         }
                                         let mut osv_score = String::new();
-                                        if !vector.is_empty(){
+                                        if !vector.is_empty() {
                                             osv_score = get_cvss(vector, &id.clone()).await;
                                         }
                                         let vuln: Vulnerability = Vulnerability::new(&id, osv_score);
                                         vulns.push(vuln);
                                     }
                                 }
-
                             }
                         }
                     }
@@ -211,7 +227,7 @@ pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
             }
         }
     }
-    let unique:Vec<_> = vulns.clone().into_iter().collect::<HashSet<_>>().into_iter().collect();
+    let unique: Vec<_> = vulns.clone().into_iter().collect::<HashSet<_>>().into_iter().collect();
     Some(unique)
 }
 
@@ -240,8 +256,8 @@ pub async fn get_json_response(url: String) -> serde_json::Value {
         .unwrap();
     let status = response.status();
     let text_res = response.text().await.unwrap();
-    if !(status == StatusCode::OK){
-        error!("NVD API failed with Error body: {}",text_res);
+    if !(status == StatusCode::OK) {
+        error!("NVD API failed with Error body: {}", text_res);
     }
     let json_response: serde_json::Value = serde_json::from_str(&text_res).expect("Failure");
     json_response
@@ -256,8 +272,8 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
         .await
         .unwrap();
     let status = json_response.status();
-    if !(status == StatusCode::OK){
-        error!("NVD API failed with Error code: {}",status);
+    if !(status == StatusCode::OK) {
+        error!("NVD API failed with Error code: {}", status);
     }
     let osv_response = match json_response.json::<OSVAlias>().await {
         Ok(json) => json,
@@ -268,14 +284,14 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
     osv_response
 }
 
-pub async fn get_cvss(vector: String, id: &str) -> String{
+pub async fn get_cvss(vector: String, id: &str) -> String {
     let mut cvss = String::new();
-    match Base::from_str(&vector){
-        Ok(base) =>{
+    match Base::from_str(&vector) {
+        Ok(base) => {
             cvss = base.score().value().to_string();
         }
-        Err(e) =>{
-            error!("Error occurred {} for CVE {} with vector {}",e,id, vector);
+        Err(e) => {
+            error!("Error occurred {} for CVE {} with vector {}", e, id, vector);
         }
     }
     cvss
@@ -307,8 +323,8 @@ pub async fn get_nvd(cve: &str) -> Value {
 pub async fn get_dep_tree(data: &sbom_cdx::CycloneDXBOM) -> HashMap<&str, Option<Vec<String>>> {
     let mut deptree: HashMap<&str, Option<Vec<String>>> = HashMap::new();
     for comp in data.iter_component() {
-        match &comp.purl{
-            Some(purl) =>{
+        match &comp.purl {
+            Some(purl) => {
                 let mut dependencies: Option<Vec<String>> = None;
                 if !(data.dependencies == None) {
                     for dep in data.iter_dependents() {
@@ -321,25 +337,28 @@ pub async fn get_dep_tree(data: &sbom_cdx::CycloneDXBOM) -> HashMap<&str, Option
                 }
                 deptree.insert(purl, dependencies);
             }
-            None =>{
+            None => {
                 info!("No Package URL found");
             }
         }
-
     }
     deptree
 }
 
-pub fn flatten_dependencies(purl: &str, deptree: HashMap<&str, Option<Vec<String>>>, exist_dep: Option<HashSet<String>>) -> Vec<String> {
+pub fn flatten_dependencies(
+    purl: &str,
+    deptree: HashMap<&str, Option<Vec<String>>>,
+    exist_dep: Option<HashSet<String>>,
+) -> Vec<String> {
     let mut flat_hs: HashSet<String> = exist_dep.unwrap_or_else(HashSet::new);
     if let Some(dependency) = deptree.get(purl).cloned().flatten() {
-        for dep in dependency{
-            if flat_hs.contains(&dep){
+        for dep in dependency {
+            if flat_hs.contains(&dep) {
                 continue;
             }
             flat_hs.insert(dep.clone());
             let x = flatten_dependencies(&dep, deptree.clone(), Some(flat_hs.clone()));
-            for y in x{
+            for y in x {
                 flat_hs.insert(y);
             }
         }
@@ -348,10 +367,12 @@ pub fn flatten_dependencies(purl: &str, deptree: HashMap<&str, Option<Vec<String
     unique_flatdep
 }
 
-pub fn remove_dep_without_vulns(vulnmap: HashMap<String, Option<Vec<Vulnerability>>>) -> HashMap<String, Option<Vec<Vulnerability>>>{
+pub fn remove_dep_without_vulns(
+    vulnmap: HashMap<String, Option<Vec<Vulnerability>>>,
+) -> HashMap<String, Option<Vec<Vulnerability>>> {
     let mut depwithvuln: HashMap<String, Option<Vec<Vulnerability>>> = HashMap::new();
-    for (reference, vuln) in vulnmap{
-        if !(vuln.clone().expect("").is_empty()){
+    for (reference, vuln) in vulnmap {
+        if !(vuln.clone().expect("").is_empty()) {
             depwithvuln.insert(reference, vuln);
         }
     }
