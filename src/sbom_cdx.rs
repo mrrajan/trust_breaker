@@ -45,7 +45,7 @@ impl CycloneDXBOM {
     }
 }
 
-pub async fn get_cdx_purl(filepath: &str) -> CycloneDXBOM {
+pub async fn get_cdx_components(filepath: &str) -> CycloneDXBOM {
     let mut file = File::open(filepath)
         .await
         .expect("Error reading the file, make sure the path exists");
@@ -55,7 +55,7 @@ pub async fn get_cdx_purl(filepath: &str) -> CycloneDXBOM {
     data
 }
 
-pub async fn get_cdx_purl_x(components: CycloneDXBOM) -> Vec<String> {
+pub async fn get_cdx_purl(components: CycloneDXBOM) -> Vec<String> {
     let mut purl_reference: Vec<String> = Vec::new();
     for component in components.components {
         if let Some(purl) = component.purl {

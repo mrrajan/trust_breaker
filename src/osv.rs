@@ -127,25 +127,12 @@ pub struct ExportHeader {
 pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Result<(), Box<dyn Error>> {
     let now = chrono::offset::Local::now();
     let custom_datetime_format = now.format("%Y%m%y_%H%M%S");
-    //let data: sbom_cdx::CycloneDXBOM = sbom_cdx::get_cdx_purl(filepath).await;
     let mut vulmap: HashMap<String, Option<Vec<Vulnerability>>> = HashMap::new();
-    //let dep_tree = get_dep_tree(&data).await;
-    //let mut osv_results: Vec<OSVResults> = Vec::new();
     for purl in purls {
         info!("Getting vuln info for {:?}...", &purl);
         let purl_vuln: Option<Vec<Vulnerability>> = get_osv_vulnerability(&purl).await;
         vulmap.insert(purl.clone(), purl_vuln);
     }
-    // for comp in data.iter_component() {
-    //     match &comp.purl{
-    //         Some(purl) =>{
-
-    //         }
-    //         None =>{
-    //             info!("No Package URL found");
-    //         }
-    //     }
-    // }
     info!("Vuln info gathing finished!");
 
     let vulnerable_dependencies: HashMap<String, Option<Vec<Vulnerability>>> = remove_dep_without_vulns(vulmap);

@@ -56,8 +56,8 @@ async fn main() {
     // }
     let mut purl: Vec<String> = Vec::new();
     if sbom_type == "cdx" {
-        let components = sbom_cdx::get_cdx_purl(&sbom_file).await;
-        purl.extend(sbom_cdx::get_cdx_purl_x(components).await);
+        let components = sbom_cdx::get_cdx_components(&sbom_file).await;
+        purl.extend(sbom_cdx::get_cdx_purl(components).await);
     } else if sbom_type == "spdx" {
         let packages = sbom_spdx::get_spdx_sbom_package(&sbom_file).await;
         purl.extend(sbom_spdx::get_spdx_purl(packages).await);
