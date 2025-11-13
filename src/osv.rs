@@ -2,9 +2,10 @@ use crate::sbom_cdx;
 use chrono;
 use csv::Writer;
 use cvss::v3::Base;
-use cvss::v4::Vector;
-use log::{error, info};
+use cvss::v4::{Vector, score};
+use log::{error, info, warn};
 use reqwest::{Response, StatusCode};
+use serde::de::value;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{to_string_pretty, Value};
 use std::collections::{HashMap, HashSet};
@@ -275,11 +276,24 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
 pub async fn get_cvss(vector: String, id: &str) -> String {
     let mut cvss = String::new();
     if vector.starts_with("CVSS:4"){
-        cvss = Vector::from_str(&vector).expect("Error for Vector").score().value().to_string();
+        cvss = match Vector::from_str(&vector){
+            Ok(base) => base.score().value().to_string(),
+            Err(e) =>{
+                warn!("Error from vector {}",e);
+                String::from("0.0")
+            }
+        }
     }else if vector.starts_with("CVSS:3"){
-        cvss = Base::from_str(&vector).expect("Error for Vector").score().value().to_string();
+        cvss = match Base::from_str(&vector){
+            Ok(base) => base.score().value().to_string(),
+            Err(e) =>{
+                warn!("Error from vector {}",e);
+                String::from("0.0")
+            }
+        }
+        //cvss = Base::from_str(&vector).expect("Error for Vector").score().value().to_string();
     }else{
-        error!("Unsupported CVSS for CVE {} with vector {}", id, vector);
+        warn!("Unsupported CVSS for CVE {} with vector {}", id, vector);
     }
     // match Base::from_str(&vector) {
     //     Ok(base) => {
