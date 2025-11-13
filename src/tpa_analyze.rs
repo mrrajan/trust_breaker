@@ -8,6 +8,8 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::{from_str, json, to_string_pretty};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
+use crate::sbom_spdx::Package;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Score {
     #[serde(rename = "type")]
@@ -45,7 +47,12 @@ pub struct Vulnerability {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TPAResponse {
     #[serde(flatten)]
-    pub tpa_response: HashMap<String, Vec<Vulnerability>>,
+    pub tpa_response: HashMap<String, PackageResponse>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PackageResponse{
+    pub details: Vec<Vulnerability>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -100,8 +107,8 @@ pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<(), Box<dyn E
         .await
         .expect("Error writing TPA response to log");
     let mut wtr = Writer::from_path(file_path.clone() + ".csv")?;
-    for (purl, vulnlist) in tpa_response.tpa_response {
-        for vuln in vulnlist {
+    for (purl, packageDetails ) in tpa_response.tpa_response {
+        for vuln in packageDetails.details {
             for affected in vuln.status.affected {
                 for score in affected.scores {
                     let _ = wtr.serialize(TPAHeaders {
