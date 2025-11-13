@@ -3,6 +3,7 @@ mod exhort;
 mod osv;
 mod sbom_cdx;
 mod sbom_spdx;
+mod tpa_analyze;
 use clap::{Arg, Command};
 use log::{error, info};
 use simplelog::*;
@@ -44,6 +45,8 @@ async fn main() {
     ])
     .unwrap();
     let mut purl: Vec<String> = Vec::new();
+    let tpa_base_url = "<<TPA URL>>";
+    let tpa_access_token="<<Access_token>>";
     if sbom_type == "cdx" {
         let components = sbom_cdx::get_cdx_components(&sbom_file).await;
         purl.extend(sbom_cdx::get_cdx_purl(components).await);
@@ -53,9 +56,6 @@ async fn main() {
     } else {
         error!("Select sbom_type as either `cdx` or `spdx`");
     }
-    osv::retrieve_sbom_osv_vulns(purl, &sbom_type).await;
-    // todo
-    // Retrieve vulnerability information from TPA analyze endpoint
-    // Create comparison logic
-    // Remove exhort.rs and compare.rs files if not needed
+    tpa_analyze::tpa_purl_vuln_analyze(tpa_base_url, tpa_access_token, purl.clone()).await;
+    osv::retrieve_sbom_osv_vulns(purl.clone(), &sbom_type).await;
 }

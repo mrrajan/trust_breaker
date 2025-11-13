@@ -2,6 +2,7 @@ use crate::sbom_cdx;
 use chrono;
 use csv::Writer;
 use cvss::v3::Base;
+use cvss::v4::Vector;
 use log::{error, info};
 use reqwest::{Response, StatusCode};
 use serde_derive::{Deserialize, Serialize};
@@ -194,7 +195,7 @@ pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
                                     if id.contains("CVE") {
                                         for severity in &cves.severity {
                                             for cvss in severity {
-                                                if cvss.score.contains("3.1") {
+                                                if cvss.score.contains("CVSS:3") {
                                                     vector = cvss.score.clone();
                                                 }
                                             }
@@ -273,14 +274,21 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
 
 pub async fn get_cvss(vector: String, id: &str) -> String {
     let mut cvss = String::new();
-    match Base::from_str(&vector) {
-        Ok(base) => {
-            cvss = base.score().value().to_string();
-        }
-        Err(e) => {
-            error!("Error occurred {} for CVE {} with vector {}", e, id, vector);
-        }
+    if vector.starts_with("CVSS:4"){
+        cvss = Vector::from_str(&vector).expect("Error for Vector").score().value().to_string();
+    }else if vector.starts_with("CVSS:3"){
+        cvss = Base::from_str(&vector).expect("Error for Vector").score().value().to_string();
+    }else{
+        error!("Unsupported CVSS for CVE {} with vector {}", id, vector);
     }
+    // match Base::from_str(&vector) {
+    //     Ok(base) => {
+    //         cvss = base.score().value().to_string();
+    //     }
+    //     Err(e) => {
+            
+    //     }
+    // }
     cvss
 }
 
