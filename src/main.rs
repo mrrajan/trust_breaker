@@ -45,8 +45,9 @@ async fn main() {
     ])
     .unwrap();
     let mut purl: Vec<String> = Vec::new();
-    let tpa_base_url = "<<TPA URL>>";
-    let tpa_access_token="<<Access_token>>";
+    let tpa_base_url = "<<RHTPA_BASE_URL>>";
+    let tpa_access_token = "<<TPA_Access_Token>>";
+    let exhort_api = "<<Exhort_API_URL>>";
     if sbom_type == "cdx" {
         let components = sbom_cdx::get_cdx_components(&sbom_file).await;
         purl.extend(sbom_cdx::get_cdx_purl(components).await);
@@ -58,4 +59,5 @@ async fn main() {
     }
     tpa_analyze::tpa_purl_vuln_analyze(tpa_base_url, tpa_access_token, purl.clone()).await;
     osv::retrieve_sbom_osv_vulns(purl.clone(), &sbom_type).await;
+    exhort::get_exhort_response(sbom_type, &sbom_file, exhort_api).await;
 }

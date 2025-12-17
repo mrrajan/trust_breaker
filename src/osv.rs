@@ -2,7 +2,7 @@ use crate::sbom_cdx;
 use chrono;
 use csv::Writer;
 use cvss::v3::Base;
-use cvss::v4::{Vector, score};
+use cvss::v4::{score, Vector};
 use log::{error, info, warn};
 use reqwest::{Response, StatusCode};
 use serde::de::value;
@@ -127,6 +127,7 @@ pub struct ExportHeader {
 }
 
 pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Result<(), Box<dyn Error>> {
+    info!("OSV: Initiate process...");
     let now = chrono::offset::Local::now();
     let custom_datetime_format = now.format("%Y%m%y_%H%M%S");
     let mut vulmap: HashMap<String, Option<Vec<Vulnerability>>> = HashMap::new();
@@ -162,6 +163,7 @@ pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Res
         }
     }
     let _ = wtr.flush();
+    info!("OSV: Response Retrieved...");
     Ok(())
 }
 
@@ -275,24 +277,24 @@ pub async fn get_osv_cve(ghsa_id: String) -> OSVAlias {
 
 pub async fn get_cvss(vector: String, id: &str) -> String {
     let mut cvss = String::new();
-    if vector.starts_with("CVSS:4"){
-        cvss = match Vector::from_str(&vector){
+    if vector.starts_with("CVSS:4") {
+        cvss = match Vector::from_str(&vector) {
             Ok(base) => base.score().value().to_string(),
-            Err(e) =>{
-                warn!("Error from vector {}",e);
+            Err(e) => {
+                warn!("Error from vector {}", e);
                 String::from("0.0")
             }
         }
-    }else if vector.starts_with("CVSS:3"){
-        cvss = match Base::from_str(&vector){
+    } else if vector.starts_with("CVSS:3") {
+        cvss = match Base::from_str(&vector) {
             Ok(base) => base.score().value().to_string(),
-            Err(e) =>{
-                warn!("Error from vector {}",e);
+            Err(e) => {
+                warn!("Error from vector {}", e);
                 String::from("0.0")
             }
         }
         //cvss = Base::from_str(&vector).expect("Error for Vector").score().value().to_string();
-    }else{
+    } else {
         warn!("Unsupported CVSS for CVE {} with vector {}", id, vector);
     }
     // match Base::from_str(&vector) {
@@ -300,7 +302,7 @@ pub async fn get_cvss(vector: String, id: &str) -> String {
     //         cvss = base.score().value().to_string();
     //     }
     //     Err(e) => {
-            
+
     //     }
     // }
     cvss

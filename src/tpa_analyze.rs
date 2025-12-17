@@ -51,7 +51,7 @@ pub struct TPAResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PackageResponse{
+pub struct PackageResponse {
     pub details: Vec<Vulnerability>,
 }
 
@@ -66,7 +66,7 @@ pub struct TPAHeaders {
 }
 
 pub async fn tpa_purl_vuln_analyze(tpa_base_url: &str, tpa_access_token: &str, purls: Vec<String>) {
-    info!("Initiate process...");
+    info!("RHTPA: Initiate process...");
     let tpa_analyze_endpoint = format!("{}/api/v2/vulnerability/analyze", tpa_base_url);
     info!("TPA Endpoint: {}", tpa_analyze_endpoint);
     let content_body =
@@ -86,7 +86,10 @@ pub async fn tpa_purl_vuln_analyze(tpa_base_url: &str, tpa_access_token: &str, p
         let tpa_response: TPAResponse = from_str(&text_response).expect("Error while parsing");
         write_tpa_result(tpa_response).await;
     } else {
-        error!("Error Reaching to TPA: \nError code - {} \nResponse -  {}", status,text_response);
+        error!(
+            "Error Reaching to TPA: \nError code - {} \nResponse -  {}",
+            status, text_response
+        );
     }
 }
 
@@ -107,7 +110,7 @@ pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<(), Box<dyn E
         .await
         .expect("Error writing TPA response to log");
     let mut wtr = Writer::from_path(file_path.clone() + ".csv")?;
-    for (purl, packageDetails ) in tpa_response.tpa_response {
+    for (purl, packageDetails) in tpa_response.tpa_response {
         for vuln in packageDetails.details {
             for affected in vuln.status.affected {
                 for score in affected.scores {
@@ -124,6 +127,6 @@ pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<(), Box<dyn E
         }
     }
     wtr.flush();
-    info!("Retrieved TPA Response...");
+    info!("RHTPA: Retrieved Response...");
     Ok(())
 }
