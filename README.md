@@ -1,6 +1,8 @@
 # Trust Breaker
 
-Trust Breaker is a Rust-based tool designed to generate JSON vulnerability reports from a given CycloneDX SBOM file. It extracts package URLs from the *components* section and flattens the dependencies for each package using the *dependencies* section. By aggregating vulnerability information for each package and its dependencies, Trust Breaker produces a JSON report that includes both direct and transitive vulnerabilities. The vulnerability data for the packages is sourced from the OSV database.\
+Trust Breaker is a Rust-based tool designed to generate JSON vulnerability reports from a given SBOM file. It extracts package URLs from the *components* section and flattens the dependencies for each package using the *dependencies* section. By aggregating vulnerability information for each package and its dependencies, Trust Breaker produces a JSON report that includes both direct and transitive vulnerabilities. The vulnerability data for the packages is sourced from the OSV database.\
+
+
 
 ## Table of Contents
 
@@ -17,13 +19,50 @@ cd trust_breaker
 cargo build
 ```
 ## Usage
-- `cargo run -- -s /home/<user>/SBOM/keycloak_cyclonedx_sbom.json` 
-- The `-s`/`--sbom_file` argument is required and should contain an absolute path to your CycloneDX SBOM file.
-- The `-t`/`--sbom_type` argument is required and the type of the SBOM file, could be either `cdx` or `spdx`
+
+### Basic Usage (OSV Analysis Only)
+```sh
+cargo run -- -s /path/to/your/sbom.json -t cdx
+# or for SPDX format:
+cargo run -- -s /path/to/your/sbom.json -t spdx
+```
+
+### With Comparison (OSV vs TPA vs Exhort)
+```sh
+cargo run -- \
+  -s /path/to/your/sbom.json \
+  -t cdx \
+  -c yes \
+  -r <RHTPA_BASE_URL> \
+  -a <RHTPA_ACCESS_TOKEN> \
+  -e <EXHORT_API_URL>
+```
+
+### Arguments
+- `-s`, `--sbom_file` (required): Absolute path to your SBOM file (CycloneDX or SPDX format)
+- `-t`, `--sbom_type` (required): Type of SBOM file - either `cdx` (CycloneDX) or `spdx` (SPDX)
+- `-c`, `--compare` (optional): Set to `yes` to enable comparison with RHTPA and Exhort results
+- `-r`, `--tpa_url` (required if compare=yes): RHTPA Base URL
+- `-a`, `--tpa_token` (required if compare=yes): RHTPA Access Token
+- `-e`, `--exhort_url` (required if compare=yes): Exhort Backend URL
 ## Logs and Outputs
-\
-The script generates three files,
-- *exhort_validator.log:* Log file, captures the events while running the script
-- *<sbom_type>_osv_<timestamp>.json:* Captures the Affected packages and its vulnerabilities in Json format from OSV database
-- *<sbom_type>_osv_<timestamp>.csv:* Captures the Affected packages and its vulnerabilities in CSV format from OSV database
+
+The tool generates the following output files in the `test_results/source/` directory:
+
+### Log Files
+- `exhort_validator.log`: Console and file log capturing all events during execution
+
+### OSV Analysis Output
+- `cdx_osv_<timestamp>.json`: OSV vulnerabilities in JSON format (for CycloneDX SBOM)
+- `cdx_osv_<timestamp>.csv`: OSV vulnerabilities in CSV format (for CycloneDX SBOM)
+- `spdx_osv_<timestamp>.json`: OSV vulnerabilities in JSON format (for SPDX SBOM)
+- `spdx_osv_<timestamp>.csv`: OSV vulnerabilities in CSV format (for SPDX SBOM)
+
+### Optional Comparison Output (when using -c yes)
+- `tpa_response_<timestamp>.json`: RHTPA API response in JSON format
+- `tpa_response_<timestamp>.csv`: RHTPA vulnerabilities in CSV format
+- `exhort_response_<timestamp>.log`: Exhort API response in JSON format
+- `exhort_response_<timestamp>.csv`: Exhort vulnerabilities in CSV format
+- `comparison/comparison_osv_vs_tpa.csv`: Comparison between OSV and RHTPA results
+- `comparison/comparison_tpa_vs_exhort.csv`: Comparison between RHTPA and Exhort results
 

@@ -189,7 +189,10 @@ fn compare_tpa_vs_exhort(tpa_data: &[TPAHeaders], exhort_data: &[ExhortRecord]) 
         }
     }
 
-    write_tpa_exhort_csv("test_results/comparison/comparison_tpa_vs_exhort.csv", &comparison_records)?;
+    write_tpa_exhort_csv(
+        "test_results/comparison/comparison_tpa_vs_exhort.csv",
+        &comparison_records,
+    )?;
 
     info!("TPA vs Exhort comparison complete!");
     Ok(())
