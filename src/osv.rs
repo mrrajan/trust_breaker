@@ -147,13 +147,21 @@ pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Res
         .write(true)
         .create(true)
         .truncate(true)
-        .open(format!("test_results/source/{}_osv_{}.json",sbom_type.to_string(), custom_datetime_format.to_string()))
+        .open(format!(
+            "test_results/source/{}_osv_{}.json",
+            sbom_type.to_string(),
+            custom_datetime_format.to_string()
+        ))
         .expect("File creation failed");
     let json_str = to_string_pretty(&vulnerable_dependencies).expect("Failed to serialize JSON");
     file.write_all(json_str.as_bytes()).expect("Writing failed");
     info!("OSV-NVD Dependency Analysis Completed!");
 
-    let mut wtr = Writer::from_path(format!("test_results/source/{}_osv_{}.csv",sbom_type.to_string(), custom_datetime_format.to_string()))?;
+    let mut wtr = Writer::from_path(format!(
+        "test_results/source/{}_osv_{}.csv",
+        sbom_type.to_string(),
+        custom_datetime_format.to_string()
+    ))?;
     let mut osv_rows: Vec<OSVHeader> = Vec::new();
     for (purl, vulnlist) in &vulnerable_dependencies {
         for vuln in vulnlist {
