@@ -42,12 +42,14 @@ impl Vulns {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OsvQuerybatchResponse {
-    results: Option<Vec<OsvVulns>>,
+    #[serde(default)]
+    results: Vec<OsvVulns>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OsvVulns {
-    vulns: Option<Vec<OsvVulnId>>,
+    #[serde(default)]
+    vulns: Vec<OsvVulnId>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -56,13 +58,15 @@ pub struct OsvVulnId {
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OSVAlias {
-    aliases: Option<Vec<String>>,
-    severity: Option<Vec<OSVSeverity>>,
+    #[serde(default)]
+    aliases: Vec<String>,
+    #[serde(default)]
+    severity: Vec<OSVSeverity>,
 }
 
 impl OSVAlias {
-    pub fn get_alias(&self) -> Option<&Vec<String>> {
-        self.aliases.as_ref()
+    pub fn get_alias(&self) -> &Vec<String> {
+        &self.aliases
     }
 }
 
@@ -74,13 +78,13 @@ pub struct OSVSeverity {
 }
 
 impl OsvQuerybatchResponse {
-    pub fn iter_results(&self) -> impl Iterator<Item = &Vec<OsvVulns>> {
+    pub fn iter_results(&self) -> impl Iterator<Item = &OsvVulns> {
         self.results.iter()
     }
 }
 
 impl OsvVulns {
-    pub fn iter_vulns(&self) -> impl Iterator<Item = &Vec<OsvVulnId>> {
+    pub fn iter_vulns(&self) -> impl Iterator<Item = &OsvVulnId> {
         self.vulns.iter()
     }
 }
@@ -120,13 +124,13 @@ impl OSVResults {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ExportHeader {
-    PURL: String,
-    CVE_ID: String,
-    CVSS: String,
+pub struct OSVHeader {
+    pub PURL: String,
+    pub CVE_ID: String,
+    pub CVSS: String,
 }
 
-pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Result<(), Box<dyn Error>> {
+pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Result<Vec<OSVHeader>, Box<dyn Error>> {
     info!("OSV: Initiate process...");
     let now = chrono::offset::Local::now();
     let custom_datetime_format = now.format("%Y%m%y_%H%M%S");
@@ -143,18 +147,18 @@ pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Res
         .write(true)
         .create(true)
         .truncate(true)
-        .open(sbom_type.to_string() + "_osv_" + &custom_datetime_format.to_string() + ".json")
+        .open(format!("test_results/source/{}_osv_{}.json",sbom_type.to_string(), custom_datetime_format.to_string()))
         .expect("File creation failed");
     let json_str = to_string_pretty(&vulnerable_dependencies).expect("Failed to serialize JSON");
     file.write_all(json_str.as_bytes()).expect("Writing failed");
     info!("OSV-NVD Dependency Analysis Completed!");
 
-    let mut wtr = Writer::from_path(sbom_type.to_string() + "_osv_" + &custom_datetime_format.to_string() + ".csv")?;
-
+    let mut wtr = Writer::from_path(format!("test_results/source/{}_osv_{}.csv",sbom_type.to_string(), custom_datetime_format.to_string()))?;
+    let mut osv_rows: Vec<OSVHeader> = Vec::new();
     for (purl, vulnlist) in &vulnerable_dependencies {
         for vuln in vulnlist {
             for vul in vuln {
-                let _ = wtr.serialize(ExportHeader {
+                osv_rows.push(OSVHeader {
                     PURL: purl.to_string(),
                     CVE_ID: vul.id.clone(),
                     CVSS: vul.cvssScore.clone(),
@@ -162,9 +166,12 @@ pub async fn retrieve_sbom_osv_vulns(purls: Vec<String>, sbom_type: &str) -> Res
             }
         }
     }
+    for row in &osv_rows {
+        wtr.serialize(row)?;
+    }
     let _ = wtr.flush();
     info!("OSV: Response Retrieved...");
-    Ok(())
+    Ok(osv_rows)
 }
 
 pub async fn get_package_vulnmap(key: String, vulmap: HashMap<String, Option<Vec<Vulnerability>>>) -> Depends {
@@ -183,43 +190,48 @@ pub async fn get_osv_payload(purl: String) -> String {
 }
 
 pub async fn get_osv_response(purl: String) -> Option<Vec<Vulnerability>> {
-    let osv_response = retrieve_osv_ghsa(purl.clone()).await;
-    let mut vulns: Vec<Vulnerability> = Vec::new();
-    if Some(&osv_response).is_some() {
-        for osv_vuln in osv_response.iter_results() {
-            for vuln in osv_vuln {
-                if vuln.vulns.is_some() {
-                    for id in vuln.iter_vulns() {
-                        for ghsa in id {
-                            let cves: OSVAlias = get_osv_cve(ghsa.id.clone()).await;
-                            for cve in cves.aliases {
-                                for id in cve {
-                                    let mut vector = String::new();
-                                    if id.contains("CVE") {
-                                        for severity in &cves.severity {
-                                            for cvss in severity {
-                                                if cvss.score.contains("CVSS:3") {
-                                                    vector = cvss.score.clone();
-                                                }
-                                            }
-                                        }
-                                        let mut osv_score = String::new();
-                                        if !vector.is_empty() {
-                                            osv_score = get_cvss(vector, &id.clone()).await;
-                                        }
-                                        let vuln: Vulnerability = Vulnerability::new(&id, osv_score);
-                                        vulns.push(vuln);
-                                    }
-                                }
-                            }
-                        }
-                    }
+    let osv_response = retrieve_osv_ghsa(purl).await;
+
+    if osv_response.results.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let mut unique_vulns: HashSet<Vulnerability> = HashSet::new();
+
+    for osv_vuln in &osv_response.results {
+        if osv_vuln.vulns.is_empty() {
+            continue;
+        }
+
+        for ghsa in &osv_vuln.vulns {
+            let cves = get_osv_cve(ghsa.id.clone()).await;
+
+            if cves.aliases.is_empty() {
+                continue;
+            }
+
+            let cvss_vector = cves
+                .severity
+                .iter()
+                .find(|cvss| (cvss.score.contains("CVSS:3") || cvss.score.contains("CVSS:4")))
+                .map(|cvss| cvss.score.clone());
+
+            for alias in &cves.aliases {
+                if !alias.contains("CVE") {
+                    continue;
                 }
+
+                let osv_score = match &cvss_vector {
+                    Some(vector) => get_cvss(vector.clone(), alias).await,
+                    None => String::new(),
+                };
+
+                unique_vulns.insert(Vulnerability::new(alias, osv_score));
             }
         }
     }
-    let unique: Vec<_> = vulns.clone().into_iter().collect::<HashSet<_>>().into_iter().collect();
-    Some(unique)
+
+    Some(unique_vulns.into_iter().collect())
 }
 
 pub async fn retrieve_osv_ghsa(purl: String) -> OsvQuerybatchResponse {
@@ -281,7 +293,7 @@ pub async fn get_cvss(vector: String, id: &str) -> String {
         cvss = match Vector::from_str(&vector) {
             Ok(base) => base.score().value().to_string(),
             Err(e) => {
-                warn!("Error from vector {}", e);
+                warn!("Error from vector {} {}", vector, e);
                 String::from("0.0")
             }
         }
@@ -289,7 +301,7 @@ pub async fn get_cvss(vector: String, id: &str) -> String {
         cvss = match Base::from_str(&vector) {
             Ok(base) => base.score().value().to_string(),
             Err(e) => {
-                warn!("Error from vector {}", e);
+                warn!("Error from vector {} {}", vector, e);
                 String::from("0.0")
             }
         }

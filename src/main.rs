@@ -57,7 +57,16 @@ async fn main() {
     } else {
         error!("Select sbom_type as either `cdx` or `spdx`");
     }
-    tpa_analyze::tpa_purl_vuln_analyze(tpa_base_url, tpa_access_token, purl.clone()).await;
-    osv::retrieve_sbom_osv_vulns(purl.clone(), &sbom_type).await;
-    exhort::get_exhort_response(sbom_type, &sbom_file, exhort_api).await;
+    let tpa_records = tpa_analyze::tpa_purl_vuln_analyze(tpa_base_url, tpa_access_token, purl.clone()).await;
+    let osv_records = osv::retrieve_sbom_osv_vulns(purl.clone(), &sbom_type)
+        .await
+        .unwrap_or_else(|e| {
+            error!("Error retrieving OSV records: {}", e);
+            Vec::new()
+        });
+    let exhort_records = exhort::get_exhort_response(sbom_type, &sbom_file, exhort_api).await;
+
+    if let Err(e) = compare::compare_sources(osv_records, tpa_records, exhort_records).await {
+        error!("Error during comparison: {}", e);
+    }
 }
