@@ -71,17 +71,17 @@ pub struct Issue {
     pub unique: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ExhortVulnerabilityRecord {
-    pub purl: String,
-    pub cve_id: String,
-    pub title: String,
-    pub source: String,
-    pub cvss_score: f32,
-    pub severity: String,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExhortRecord {
+    pub PURL: String,
+    pub CVE_ID: String,
+    pub TITLE: String,
+    pub SOURCE: String,
+    pub CVSS: String,
+    pub SEVERITY: String,
 }
 
-pub async fn get_exhort_response(sbom_type: &str, file_path: &str, exhort_api: &str) {
+pub async fn get_exhort_response(sbom_type: &str, file_path: &str, exhort_api: &str) -> Vec<ExhortRecord> {
     info!("Exhort: Initiate process...");
     info!("Exhort API URL: {}", exhort_api);
     let mut file = File::open(file_path).await.expect("Error opening the file");
@@ -104,26 +104,31 @@ pub async fn get_exhort_response(sbom_type: &str, file_path: &str, exhort_api: &
     let text_res = response.text().await.unwrap();
     if !(status == StatusCode::OK) {
         error!("Exhort Returns error response : {}", text_res);
+        Vec::new()
     } else {
         let exhort_response = from_str(&text_res).expect("Error while parsing ");
-        if let Err(e) = write_exhort_result(exhort_response).await {
-            error!("Error writing Exhort result: {}", e);
+        match write_exhort_result(exhort_response).await {
+            Ok(records) => records,
+            Err(e) => {
+                error!("Error writing Exhort result: {}", e);
+                Vec::new()
+            }
         }
     }
 }
 
-pub async fn write_exhort_result(exhort_response: ExhortResponse) -> Result<(), Box<dyn Error>> {
+pub async fn write_exhort_result(exhort_response: ExhortResponse) -> Result<Vec<ExhortRecord>, Box<dyn Error>> {
     info!("Writing Exhort Response to output files...");
     let now: chrono::DateTime<chrono::Local> = chrono::offset::Local::now();
     let custom_datetime_format = now.format("%Y%m%y_%H%M%S");
-    let file_path = format!("exhort_response_{}", custom_datetime_format);
+    let file_path = format!("test_results/source/exhort_response_{}", custom_datetime_format);
 
     // Write JSON log file
     let mut file = TokioOpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .open(file_path.clone() + ".log")
+        .open(file_path.clone() + ".json")
         .await
         .expect("Error while creating Exhort log file");
     let response_str = to_string_pretty(&exhort_response).expect("Error while parsing Exhort response to json");
@@ -140,41 +145,42 @@ pub async fn write_exhort_result(exhort_response: ExhortResponse) -> Result<(), 
         ("osv-github", &exhort_response.providers.rhtpa.sources.osv),
         ("redhat-csaf", &exhort_response.providers.rhtpa.sources.csaf),
     ];
-
+    let mut exhort_rows: Vec<ExhortRecord> = Vec::new();
     for (_source_name, source) in sources {
         if let Some(src) = source {
             for dependency in &src.dependencies {
                 // Direct issues in the main dependency package
                 for issue in &dependency.issues {
-                    let record = ExhortVulnerabilityRecord {
-                        purl: dependency.purl.clone(),
-                        cve_id: issue.id.clone(),
-                        title: issue.title.clone(),
-                        source: issue.source.clone(),
-                        cvss_score: issue.cvss_score,
-                        severity: issue.severity.clone(),
-                    };
-                    let _ = wtr.serialize(&record);
+                    exhort_rows.push(ExhortRecord {
+                        PURL: dependency.purl.clone(),
+                        CVE_ID: issue.id.clone(),
+                        TITLE: issue.title.clone(),
+                        SOURCE: issue.source.clone(),
+                        CVSS: issue.cvss_score.to_string(),
+                        SEVERITY: issue.severity.clone(),
+                    });
                 }
 
                 // Issues in transitive dependencies
                 for transitive in &dependency.transitive {
                     for issue in &transitive.issues {
-                        let record = ExhortVulnerabilityRecord {
-                            purl: transitive.purl.clone(),
-                            cve_id: issue.id.clone(),
-                            title: issue.title.clone(),
-                            source: issue.source.clone(),
-                            cvss_score: issue.cvss_score,
-                            severity: issue.severity.clone(),
-                        };
-                        let _ = wtr.serialize(&record);
+                        exhort_rows.push(ExhortRecord {
+                            PURL: transitive.purl.clone(),
+                            CVE_ID: issue.id.clone(),
+                            TITLE: issue.title.clone(),
+                            SOURCE: issue.source.clone(),
+                            CVSS: issue.cvss_score.to_string(),
+                            SEVERITY: issue.severity.clone(),
+                        });
                     }
                 }
             }
         }
     }
+    for row in &exhort_rows {
+        wtr.serialize(row)?;
+    }
     wtr.flush()?;
     info!("Exhort: Retrieved Response...");
-    Ok(())
+    Ok(exhort_rows)
 }

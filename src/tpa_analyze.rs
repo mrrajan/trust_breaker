@@ -57,15 +57,15 @@ pub struct PackageResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TPAHeaders {
-    PURL: String,
-    CVE_ID: String,
-    OSV_ID: String,
-    CVSS: String,
-    CVSSType: String,
-    Source: String,
+    pub PURL: String,
+    pub CVE_ID: String,
+    pub OSV_ID: String,
+    pub CVSS: String,
+    pub CVSSType: String,
+    pub Source: String,
 }
 
-pub async fn tpa_purl_vuln_analyze(tpa_base_url: &str, tpa_access_token: &str, purls: Vec<String>) {
+pub async fn tpa_purl_vuln_analyze(tpa_base_url: &str, tpa_access_token: &str, purls: Vec<String>) -> Vec<TPAHeaders> {
     info!("RHTPA: Initiate process...");
     let tpa_analyze_endpoint = format!("{}/api/v2/vulnerability/analyze", tpa_base_url);
     info!("TPA Endpoint: {}", tpa_analyze_endpoint);
@@ -82,27 +82,34 @@ pub async fn tpa_purl_vuln_analyze(tpa_base_url: &str, tpa_access_token: &str, p
         .unwrap();
     let status = response.status();
     let text_response = response.text().await.unwrap();
-    if (status == StatusCode::OK) {
+    if status == StatusCode::OK {
         let tpa_response: TPAResponse = from_str(&text_response).expect("Error while parsing");
-        write_tpa_result(tpa_response).await;
+        match write_tpa_result(tpa_response).await {
+            Ok(tpa_vulnerability) => tpa_vulnerability,
+            Err(e) => {
+                error!("Failed to write TPA result: {}", e);
+                Vec::new()
+            }
+        }
     } else {
         error!(
             "Error Reaching to TPA: \nError code - {} \nResponse -  {}",
             status, text_response
         );
+        Vec::new()
     }
 }
 
-pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<(), Box<dyn Error>> {
+pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<Vec<TPAHeaders>, Box<dyn Error>> {
     info!("Writing TPA Response to output files...");
     let now: chrono::DateTime<chrono::Local> = chrono::offset::Local::now();
     let custom_datetime_format = now.format("%Y%m%y_%H%M%S");
-    let file_path = format!("tpa_response_{}", custom_datetime_format);
+    let file_path = format!("test_results/source/tpa_response_{}", custom_datetime_format);
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .open(file_path.clone() + ".log")
+        .open(file_path.clone() + ".json")
         .await
         .expect("Error while creating TPA log file");
     let response_str = to_string_pretty(&tpa_response).expect("Error while parsing TPA response to json");
@@ -110,11 +117,12 @@ pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<(), Box<dyn E
         .await
         .expect("Error writing TPA response to log");
     let mut wtr = Writer::from_path(file_path.clone() + ".csv")?;
+    let mut tpa_values: Vec<TPAHeaders> = Vec::new();
     for (purl, packageDetails) in tpa_response.tpa_response {
         for vuln in packageDetails.details {
             for affected in vuln.status.affected {
                 for score in affected.scores {
-                    let _ = wtr.serialize(TPAHeaders {
+                    tpa_values.push(TPAHeaders {
                         PURL: purl.to_string(),
                         CVE_ID: vuln.identifier.to_string(),
                         OSV_ID: affected.identifier.to_string(),
@@ -126,7 +134,10 @@ pub async fn write_tpa_result(tpa_response: TPAResponse) -> Result<(), Box<dyn E
             }
         }
     }
-    wtr.flush();
+    for row in &tpa_values {
+        wtr.serialize(row)?;
+    }
+    wtr.flush()?;
     info!("RHTPA: Retrieved Response...");
-    Ok(())
+    Ok(tpa_values)
 }
